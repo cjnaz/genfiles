@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Generate a tree of files for testing purposes.
+
+The total number of num-files are evenly distributed over num-dirs, where possible.
+The total number of num-dirs are distributed over 2**(dirs-depth -1) bottom node-level directories.
+The leaf dirs are effectively at the dirs-depth level.
+The precise number of files are created; however, the last leaf dir will have fewer files if 
+the num-files/num-dirs ratio is not a whole number.
+Fewer than num-dirs are created if the dirs-depth and num-files/num-dirs ratios don't result
+in a whole number.
+
+EG:
+    "--num-file 100 --num-dirs 20 --dirs-depth 3"
+  generates
+    gentree/node_A/node_A/leaf_1 (containing file_1 to file_5)
+    ...
+    gentree/node_B/node_B/leaf_20 (containing file_96 to file_100)
+
+"""
+
+__version__ = "v0.0 200713"
+
+
+#==========================================================
+#
+#  Chris Nelson, January 2020
+#
+# 200713 v0.0  New
+#
+# Changes pending
+#   
+#==========================================================
+
+import argparse
+import sys
+import os
+import shutil
+import math
+
+# Configs / Constants
+DIRS_DEPTH = 3
+NUM_DIRS = 20
+NUM_FILES = 100
+TREE_BASE =     "gentree/"
+DIR_NODE_BASE = "node_"
+DIR_LEAF_BASE = "leaf_"
+FILE_BASE =     "file_"
+
+
+def main():
+    num_bottom_node_dirs = 2**(args.dirs_depth -1)
+    num_leafdirs_per_bottom_node_dir = max(math.ceil(args.num_dirs / num_bottom_node_dirs), 1)
+    num_files_per_leafdir = math.ceil(args.num_files / args.num_dirs)
+
+    print (f"{'Requested dirs_depth':40} {args.dirs_depth}")
+    print (f"{'Requested num_dirs':40} {args.num_dirs}")
+    print (f"{'Requested num_files':40} {args.num_files}")
+    print (f"{'dir_node_base':40} <{args.dir_node_base}>")
+    print (f"{'dir_leaf_base':40} <{args.dir_leaf_base}>")
+    print (f"{'file_base':40} <{args.file_base}>")
+    print (f"{'Calc num_bottom_node_dirs':40} {num_bottom_node_dirs}")
+    print (f"{'Calc num_leafdirs_per_bottom_node_dir':40} {num_leafdirs_per_bottom_node_dir}")
+    print (f"{'Calc num_files_per_leafdir':40} {num_files_per_leafdir}")
+
+
+    cnt_leafdirs = 0
+    cnt_files = 0
+    cnt_bottom_node_dirs = 0
+
+
+    def build_tree(depth, path):
+        nonlocal cnt_leafdirs
+        nonlocal cnt_files
+        nonlocal cnt_bottom_node_dirs
+        if cnt_leafdirs < args.num_dirs and cnt_files < args.num_files:
+            if depth < args.dirs_depth:
+                newpath = path + args.dir_node_base + 'A/'
+                if args.verbose:
+                    print(newpath)
+                if not args.dry_run:
+                    os.mkdir(newpath)
+                build_tree (depth +1, newpath)
+
+                if cnt_leafdirs < args.num_dirs and cnt_files < args.num_files:
+                    newpath = path + args.dir_node_base + 'B/'
+                    if args.verbose:
+                        print(newpath)
+                    if not args.dry_run:
+                        os.mkdir(newpath)
+                    build_tree (depth +1, newpath)
+
+            else:   # Bottom of the tree case
+                cnt_bottom_node_dirs += 1
+                for leafdir in range(num_leafdirs_per_bottom_node_dir):
+                    if cnt_leafdirs < args.num_dirs and cnt_files < args.num_files:
+                        cnt_leafdirs += 1
+                        newpath = path + args.dir_leaf_base + str(cnt_leafdirs) + '/'
+                        if args.verbose:
+                            print(newpath)
+                        if not args.dry_run:
+                            os.mkdir(newpath)
+                        for _file in range(num_files_per_leafdir):
+                            if cnt_files < args.num_files:
+                                cnt_files += 1
+                                newfile = newpath + args.file_base + str(cnt_files)
+                                if args.verbose:
+                                    print(newfile)
+                                if not args.dry_run:
+                                    if args.file_content is not None:
+                                        shutil.copy(args.file_content, newfile)
+                                    else:
+                                        os.mknod(newfile)
+
+
+    tree_base = args.RootPath + TREE_BASE
+    if os.path.exists(tree_base):
+        if not args.dry_run:
+            print (f"Deleting existing tree <{tree_base}>")
+            shutil.rmtree(tree_base)
+
+    if not args.dry_run:
+        os.mkdir(tree_base)
+    build_tree(1, tree_base)
+
+    print (f"{'Actual num bottom node dirs created':40} {cnt_bottom_node_dirs}")
+    print (f"{'Actual num leaf dirs created':40} {cnt_leafdirs}")
+    print (f"{'Actual num files created':40} {cnt_files}")
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('RootPath',
+                        help=f"Dir must exist.  <{TREE_BASE}> created here containing generated hierarchy.")
+    parser.add_argument('-f', '--num-files', type=int, default=NUM_FILES,
+                        help=f"Number of files to generate (default = {NUM_FILES}).",)
+    parser.add_argument('-d', '--num-dirs', type=int, default=NUM_DIRS,
+                        help=f"Number of leaf-level directories to generate (approximate, default = {NUM_DIRS}).",)
+    parser.add_argument('-e', '--dirs-depth', type=int, default=DIRS_DEPTH,
+                        help=f"Depth of leaf-level directories (default = {DIRS_DEPTH}).",)
+    parser.add_argument('--dir-node-base', default=DIR_NODE_BASE,
+                        help=f'Name base for node (non-leaf) directories (default = "{DIR_NODE_BASE}").',)
+    parser.add_argument('--dir-leaf-base', default=DIR_LEAF_BASE,
+                        help=f'Name base for leaf (bottom level) directories (default = "{DIR_LEAF_BASE}").',)
+    parser.add_argument('--file-base', default=FILE_BASE,
+                        help=f'Name base for created files (default = "{FILE_BASE}").',)
+    parser.add_argument('--file-content',
+                        help=f"Path to file with content to be inserted in created files (default empty).",)
+    parser.add_argument('-n', '--dry-run', action='store_true',
+                        help="Don't actually create any dirs/files, nor delete any existing tree.")
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help="Print status and activity messages.")
+    parser.add_argument('-V', '--version', action='version', version='%(prog)s ' + __version__,
+                        help="Return version number and exit.")
+
+    args = parser.parse_args()
+
+    if not args.RootPath.endswith('/'):
+        args.RootPath += '/'
+    if not os.path.exists(args.RootPath):
+        print (f"Path location {args.RootPath} not found.")
+        sys.exit()
+    if args.file_content is not None:
+        if not os.path.exists(args.file_content):
+            print (f"--file-content file {args.file_content} not found.")
+            sys.exit()
+
+    main()
